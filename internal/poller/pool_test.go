@@ -71,15 +71,20 @@ func TestPool_ScanStopsGoroutineWhenUserLeavesEventMode(t *testing.T) {
 	p.scan(ctx) // start goroutine
 
 	fst.eventUsers = nil
-	p.scan(ctx) // should cancel it
+	p.scan(ctx) // cancels the goroutine; it removes itself from p.running on exit
 
-	p.mu.Lock()
-	count := len(p.running)
-	p.mu.Unlock()
-
-	if count != 0 {
-		t.Fatalf("expected 0 running goroutines after user left event mode, got %d", count)
+	// The goroutine owns its own cleanup; wait for it to exit.
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		p.mu.Lock()
+		count := len(p.running)
+		p.mu.Unlock()
+		if count == 0 {
+			return
+		}
+		time.Sleep(time.Millisecond)
 	}
+	t.Fatal("goroutine did not remove itself from p.running within 1s after cancellation")
 }
 
 func TestPool_ScanDoesNotDuplicateGoroutines(t *testing.T) {

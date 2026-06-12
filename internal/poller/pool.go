@@ -97,10 +97,10 @@ func (p *Pool) scan(ctx context.Context) {
 	}
 
 	// Cancel goroutines for users who left event mode.
+	// The goroutine removes itself from p.running on exit; we only signal it here.
 	for id, cancel := range p.running {
 		if !active[id] {
 			cancel()
-			delete(p.running, id)
 		}
 	}
 }
