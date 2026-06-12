@@ -70,21 +70,21 @@ func (h *Handlers) Callback(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := h.Tokens.Exchange(r.Context(), code)
 	if err != nil {
-		http.Error(w, "token exchange failed", http.StatusBadGateway)
+		http.Error(w, "internal error", http.StatusBadGateway)
 		return
 	}
 	mType, mID, err := h.Memberships.PrimaryDestinyMembership(r.Context(), resp.AccessToken)
 	if err != nil {
-		http.Error(w, "could not resolve destiny membership", http.StatusBadGateway)
+		http.Error(w, "internal error", http.StatusBadGateway)
 		return
 	}
 	id, err := h.Store.UpsertUser(r.Context(), store.User{BungieMembershipID: mID, MembershipType: mType})
 	if err != nil {
-		http.Error(w, "user upsert failed", http.StatusInternalServerError)
+		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 	if err := h.Tokens.Persist(r.Context(), id, resp, time.Now()); err != nil {
-		http.Error(w, "token persist failed", http.StatusInternalServerError)
+		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 	h.Sessions.SetUserID(w, id)
@@ -139,7 +139,7 @@ func (h *Handlers) SaveSettings(w http.ResponseWriter, r *http.Request) {
 	cur.TriggerMode = mode
 	cur.IntervalSeconds = interval
 	if err := h.Store.SaveSettings(r.Context(), cur); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 	http.Redirect(w, r, "/", http.StatusFound)
@@ -152,7 +152,7 @@ func (h *Handlers) CycleNow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.Cycler.CycleUser(r.Context(), id, time.Now()); err != nil {
-		fmt.Fprintf(w, "Cycle failed: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 	fmt.Fprint(w, "Emblem cycled!")

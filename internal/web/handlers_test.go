@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -44,6 +45,15 @@ type stubResolver struct {
 
 func (s stubResolver) PrimaryDestinyMembership(context.Context, string) (int64, string, error) {
 	return s.mType, s.mID, nil
+}
+
+type errTokens struct{}
+
+func (errTokens) Exchange(context.Context, string) (auth.TokenResponse, error) {
+	return auth.TokenResponse{}, fmt.Errorf("dial timeout")
+}
+func (errTokens) Persist(context.Context, int64, auth.TokenResponse, time.Time) error {
+	return nil
 }
 
 func TestCallback_ResolvesAndStoresDestinyMembership(t *testing.T) {
@@ -114,5 +124,27 @@ func TestCycleNow_WithSession(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "cycled") {
 		t.Fatalf("expected success message, got %q", w.Body.String())
+	}
+}
+
+func TestCallback_GenericErrorOnTokenFailure(t *testing.T) {
+	h := &Handlers{
+		Store:        store.NewMemory(),
+		Tokens:       errTokens{},
+		Memberships:  stubResolver{},
+		Sessions:     stubSessions{},
+		AuthorizeURL: "https://www.bungie.net/en/OAuth/Authorize",
+	}
+	req := httptest.NewRequest(http.MethodGet, "/callback?code=abc", nil)
+	w := httptest.NewRecorder()
+	h.Callback(w, req)
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("want 502, got %d", w.Code)
+	}
+	if strings.Contains(w.Body.String(), "dial timeout") {
+		t.Fatalf("body must not expose internal error: %q", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "internal error") {
+		t.Fatalf("body should say 'internal error', got %q", w.Body.String())
 	}
 }
