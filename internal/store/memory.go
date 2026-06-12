@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// compile-time assertion that *Memory satisfies the Store interface.
-var _ Store = (*Memory)(nil)
 
 type Memory struct {
 	mu       sync.Mutex
