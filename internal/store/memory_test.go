@@ -50,3 +50,20 @@ func TestMemoryStore_DueUsers(t *testing.T) {
 		t.Fatalf("expected none due, got %v", due)
 	}
 }
+
+func TestMemoryStore_DueUsers_ExactDeadline(t *testing.T) {
+	ctx := context.Background()
+	s := NewMemory()
+	id, _ := s.UpsertUser(ctx, User{BungieMembershipID: "m1"})
+	last := time.Date(2026, 6, 1, 0, 1, 0, 0, time.UTC)
+	_ = s.SaveSettings(ctx, Settings{UserID: id, Enabled: true, TriggerMode: "scheduled", IntervalSeconds: 60, LastCycledAt: &last})
+
+	// Querying at exactly last+interval must count as due.
+	due, err := s.DueUsers(ctx, last.Add(60*time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(due) != 1 || due[0] != id {
+		t.Fatalf("expected user due exactly at deadline, got %v", due)
+	}
+}
