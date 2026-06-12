@@ -33,14 +33,14 @@ type TokenManager struct {
 	clientID     string
 	clientSecret string
 	tokenBase    string // base URL hosting /Platform/App/OAuth/Token/
-	http         *http.Client
+	httpClient   *http.Client
 }
 
 func NewTokenManager(s store.Store, box *cryptobox.Box, clientID, clientSecret, tokenBase string, hc *http.Client) *TokenManager {
 	if hc == nil {
 		hc = http.DefaultClient
 	}
-	return &TokenManager{store: s, box: box, clientID: clientID, clientSecret: clientSecret, tokenBase: tokenBase, http: hc}
+	return &TokenManager{store: s, box: box, clientID: clientID, clientSecret: clientSecret, tokenBase: tokenBase, httpClient: hc}
 }
 
 // ValidAccessToken returns a usable access token, refreshing if the stored one is expired.
@@ -63,14 +63,14 @@ func (tm *TokenManager) ValidAccessToken(ctx context.Context, userID int64, now 
 	if err != nil {
 		return "", err
 	}
-	resp, err := tm.requestToken(ctx, url.Values{
+	resp, err := tm.requestTokenValue(ctx, url.Values{
 		"grant_type":    {"refresh_token"},
 		"refresh_token": {string(refresh)},
 	})
 	if err != nil {
 		return "", err
 	}
-	if err := tm.persist(ctx, userID, resp, now); err != nil {
+	if err := tm.Persist(ctx, userID, resp, now); err != nil {
 		return "", err
 	}
 	return resp.AccessToken, nil
@@ -84,10 +84,6 @@ func (tm *TokenManager) Exchange(ctx context.Context, code string) (tokenRespons
 	})
 }
 
-func (tm *TokenManager) requestToken(ctx context.Context, form url.Values) (tokenResponse, error) {
-	return tm.requestTokenValue(ctx, form)
-}
-
 func (tm *TokenManager) requestTokenValue(ctx context.Context, form url.Values) (tokenResponse, error) {
 	form.Set("client_id", tm.clientID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
@@ -98,7 +94,7 @@ func (tm *TokenManager) requestTokenValue(ctx context.Context, form url.Values) 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.SetBasicAuth(tm.clientID, tm.clientSecret)
 
-	resp, err := tm.http.Do(req)
+	resp, err := tm.httpClient.Do(req)
 	if err != nil {
 		return tokenResponse{}, err
 	}
@@ -115,10 +111,6 @@ func (tm *TokenManager) requestTokenValue(ctx context.Context, form url.Values) 
 
 // Persist encrypts and stores a token response. Exported for the OAuth callback.
 func (tm *TokenManager) Persist(ctx context.Context, userID int64, resp tokenResponse, now time.Time) error {
-	return tm.persist(ctx, userID, resp, now)
-}
-
-func (tm *TokenManager) persist(ctx context.Context, userID int64, resp tokenResponse, now time.Time) error {
 	accEnc, err := tm.box.Encrypt([]byte(resp.AccessToken))
 	if err != nil {
 		return err
