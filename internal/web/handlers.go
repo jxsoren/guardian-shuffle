@@ -29,6 +29,10 @@ type Cycler interface {
 type SessionManager interface {
 	UserID(r *http.Request) (int64, bool)
 	SetUserID(w http.ResponseWriter, userID int64)
+	// SetState generates a random nonce, stores it in a signed cookie, and returns the nonce.
+	SetState(w http.ResponseWriter) string
+	// ConsumeState validates state against the stored cookie and clears it; returns false if invalid.
+	ConsumeState(w http.ResponseWriter, r *http.Request, state string) bool
 }
 
 // TokenService is the subset of the OAuth token manager the handlers need.
@@ -54,15 +58,22 @@ type Handlers struct {
 }
 
 func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
+	state := h.Sessions.SetState(w)
 	q := url.Values{
 		"response_type": {"code"},
 		"client_id":     {h.ClientID},
+		"state":         {state},
 	}
 	http.Redirect(w, r, h.AuthorizeURL+"?"+q.Encode(), http.StatusFound)
 }
 
 // Callback handles the OAuth redirect: exchange code, look up membership, create session.
 func (h *Handlers) Callback(w http.ResponseWriter, r *http.Request) {
+	state := r.URL.Query().Get("state")
+	if !h.Sessions.ConsumeState(w, r, state) {
+		http.Error(w, "invalid state", http.StatusBadRequest)
+		return
+	}
 	code := r.URL.Query().Get("code")
 	if code == "" {
 		http.Error(w, "missing code", http.StatusBadRequest)
