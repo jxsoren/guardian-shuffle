@@ -116,12 +116,14 @@ func (up *userPoller) poll(ctx context.Context, state *pollState) (time.Duration
 		}
 	}
 
-	_ = up.st.SaveActivityState(ctx, store.ActivityState{
+	if err := up.st.SaveActivityState(ctx, store.ActivityState{
 		UserID:       up.userID,
 		CharID:       up.user.PrimaryCharacterID,
 		ActivityHash: hash,
 		UpdatedAt:    time.Now(),
-	})
+	}); err != nil {
+		log.Printf("poller: user %d: save activity state: %v", up.userID, err)
+	}
 
 	if *state == stateInActivity {
 		return fastInterval, false

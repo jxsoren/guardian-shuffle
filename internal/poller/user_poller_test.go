@@ -194,6 +194,20 @@ func TestPoll_NoCharacterID_SlowIntervalNoCycle(t *testing.T) {
 	}
 }
 
+func TestPoll_ReauthFromToken_StopsPoller(t *testing.T) {
+	up := newPoller(&fakeAPI{hashes: []uint32{999}}, &stubCycler{})
+	up.getToken = func(context.Context, int64, time.Time) (string, error) {
+		return "", reauthErr
+	}
+	state := stateUnknown
+
+	_, stop := up.poll(context.Background(), &state)
+
+	if !stop {
+		t.Fatal("expected stop=true on ErrReauthRequired from getToken")
+	}
+}
+
 func TestPoll_PersistsActivityState(t *testing.T) {
 	api := &fakeAPI{hashes: []uint32{999}}
 	up := newPoller(api, &stubCycler{})
