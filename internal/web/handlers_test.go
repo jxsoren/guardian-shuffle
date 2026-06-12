@@ -240,6 +240,9 @@ func TestSaveSettings_UnknownModeFallsBackToManual(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.SaveSettings(w, req)
 
+	if w.Code != http.StatusFound {
+		t.Fatalf("want 302, got %d: %s", w.Code, w.Body.String())
+	}
 	got, _ := st.GetSettings(context.Background(), id)
 	if got.TriggerMode != "manual" {
 		t.Fatalf("expected fallback to manual, got %q", got.TriggerMode)
