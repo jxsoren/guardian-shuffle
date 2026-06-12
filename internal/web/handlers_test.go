@@ -18,7 +18,7 @@ type stubSessions struct {
 	ok bool
 }
 
-func (s stubSessions) UserID(*http.Request) (int64, bool) { return s.id, s.ok }
+func (s stubSessions) UserID(*http.Request) (int64, bool)   { return s.id, s.ok }
 func (s stubSessions) SetUserID(http.ResponseWriter, int64) {}
 
 func TestLoginRedirectsToBungie(t *testing.T) {
