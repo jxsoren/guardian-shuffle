@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"os"
+	"strings"
 )
 
 type Config struct {
@@ -18,6 +19,7 @@ type Config struct {
 	EncryptionKey      []byte // 32 bytes, AES-256
 	HMACKey            []byte // 32 bytes, HMAC session signing (HKDF-derived)
 	ListenAddr         string
+	SecureCookies      bool
 }
 
 func Load() (Config, error) {
@@ -48,6 +50,7 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("hkdf key derivation: %w", err)
 	}
 	c.HMACKey = hmacKey
+	c.SecureCookies = strings.HasPrefix(c.BaseURL, "https://")
 	return c, nil
 }
 

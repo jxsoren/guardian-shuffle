@@ -12,9 +12,14 @@ import (
 const sessionCookie = "gs_session"
 
 // CookieSessions stores the user ID in a cookie with an HMAC signature.
-type CookieSessions struct{ key []byte }
+type CookieSessions struct {
+	key    []byte
+	secure bool
+}
 
-func NewCookieSessions(key []byte) *CookieSessions { return &CookieSessions{key: key} }
+func NewCookieSessions(key []byte, secure bool) *CookieSessions {
+	return &CookieSessions{key: key, secure: secure}
+}
 
 var _ SessionManager = (*CookieSessions)(nil)
 
@@ -33,6 +38,7 @@ func (s *CookieSessions) SetUserID(w http.ResponseWriter, userID int64) {
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
+		Secure:   s.secure,
 	})
 }
 
