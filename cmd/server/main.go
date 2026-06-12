@@ -52,18 +52,37 @@ func main() {
 		emblemMu  sync.RWMutex
 		emblemSet = map[uint32]bool{}
 	)
-	refreshEmblems := func() {
+	refreshEmblems := func() bool {
 		set, err := api.GetEmblemHashSet(ctx)
 		if err != nil {
 			log.Printf("manifest: emblem set refresh failed: %v", err)
-			return
+			return false
 		}
 		emblemMu.Lock()
 		emblemSet = set
 		emblemMu.Unlock()
 		log.Printf("manifest: loaded %d emblem hashes", len(set))
+		return true
 	}
-	refreshEmblems()
+
+	// Initial load with retry.
+	func() {
+		delays := []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second}
+		if refreshEmblems() {
+			return
+		}
+		for _, d := range delays {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(d):
+			}
+			if refreshEmblems() {
+				return
+			}
+		}
+	}()
+
 	go func() {
 		t := time.NewTicker(24 * time.Hour)
 		defer t.Stop()
