@@ -27,6 +27,9 @@ func (f *fakeAPI) EquipItem(_ context.Context, _, itemInstanceID, _ string, _ in
 	f.equipped = append(f.equipped, itemInstanceID)
 	return nil
 }
+func (f *fakeAPI) GetCharacterActivities(_ context.Context, _ string, _ int64, _, _ string) (uint32, error) {
+	return 0, nil
+}
 
 // staticToken returns a fixed access token; the engine only needs a string.
 func staticToken(context.Context, int64, time.Time) (string, error) { return "tok", nil }
