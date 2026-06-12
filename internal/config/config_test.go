@@ -15,6 +15,19 @@ func TestLoad_RequiresEncryptionKey(t *testing.T) {
 	}
 }
 
+func TestLoad_RejectsWrongLengthKey(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://x")
+	t.Setenv("BUNGIE_API_KEY", "key")
+	t.Setenv("BUNGIE_CLIENT_ID", "cid")
+	t.Setenv("BUNGIE_CLIENT_SECRET", "secret")
+	t.Setenv("BASE_URL", "http://localhost:8080")
+	t.Setenv("TOKEN_ENCRYPTION_KEY", "tooshort") // present but not 32 bytes
+
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error when TOKEN_ENCRYPTION_KEY is not 32 bytes")
+	}
+}
+
 func TestLoad_Succeeds(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://x")
 	t.Setenv("BUNGIE_API_KEY", "key")
