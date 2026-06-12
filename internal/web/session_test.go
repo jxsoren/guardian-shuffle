@@ -88,3 +88,13 @@ func TestCookieSession_StateRejectsNoCookie(t *testing.T) {
 		t.Fatal("expected ConsumeState to return false when no state cookie present")
 	}
 }
+
+func TestCookieSession_StateRejectsTamperedCookie(t *testing.T) {
+	sm := NewCookieSessions([]byte("0123456789abcdef0123456789abcdef"), false)
+	req := httptest.NewRequest(http.MethodGet, "/callback?state=anything", nil)
+	req.AddCookie(&http.Cookie{Name: "gs_oauth_state", Value: "deadbeef|anything"})
+	cw := httptest.NewRecorder()
+	if sm.ConsumeState(cw, req, "anything") {
+		t.Fatal("tampered state cookie must be rejected")
+	}
+}
