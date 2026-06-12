@@ -15,6 +15,7 @@
         <select name="mode">
           <option value="manual" {{if eq .Mode "manual"}}selected{{end}}>Manual</option>
           <option value="scheduled" {{if eq .Mode "scheduled"}}selected{{end}}>Scheduled</option>
+          <option value="event" {{if eq .Mode "event"}}selected{{end}}>After each game</option>
         </select>
       </label><br>
       <label>Interval (seconds): <input type="number" name="interval_seconds" value="{{.IntervalSeconds}}" min="60"></label><br>

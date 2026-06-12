@@ -35,12 +35,16 @@ func NewPostgres(ctx context.Context, url string) (*Postgres, error) {
 func (p *Postgres) Close() error { return p.db.Close() }
 
 func (p *Postgres) Migrate(ctx context.Context) error {
-	b, err := migrationsFS.ReadFile("migrations/0001_init.sql")
-	if err != nil {
-		return err
+	for _, name := range []string{"0001_init.sql", "0002_activity_state.sql"} {
+		b, err := migrationsFS.ReadFile("migrations/" + name)
+		if err != nil {
+			return err
+		}
+		if _, err := p.db.ExecContext(ctx, string(b)); err != nil {
+			return fmt.Errorf("migration %s: %w", name, err)
+		}
 	}
-	_, err = p.db.ExecContext(ctx, string(b))
-	return err
+	return nil
 }
 
 func (p *Postgres) UpsertUser(ctx context.Context, u User) (int64, error) {
@@ -143,5 +147,53 @@ func (p *Postgres) RecordSwap(ctx context.Context, userID int64, fromHash, toHas
 	_, err := p.db.ExecContext(ctx,
 		`INSERT INTO swap_history (user_id, from_hash, to_hash, status) VALUES ($1, $2, $3, $4)`,
 		userID, int64(fromHash), int64(toHash), status)
+	return err
+}
+
+func (p *Postgres) EventModeUsers(ctx context.Context) ([]User, error) {
+	rows, err := p.db.QueryContext(ctx, `
+		SELECT u.id, u.bungie_membership_id, u.membership_type, u.primary_character_id
+		FROM users u JOIN settings s ON s.user_id = u.id
+		WHERE s.enabled = true AND s.trigger_mode = 'event'`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var users []User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.BungieMembershipID, &u.MembershipType, &u.PrimaryCharacterID); err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+	return users, rows.Err()
+}
+
+func (p *Postgres) GetActivityState(ctx context.Context, userID int64) (ActivityState, error) {
+	var s ActivityState
+	var hash int64
+	err := p.db.QueryRowContext(ctx,
+		`SELECT user_id, char_id, activity_hash, updated_at FROM activity_states WHERE user_id = $1`, userID).
+		Scan(&s.UserID, &s.CharID, &hash, &s.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return ActivityState{}, nil
+	}
+	if err != nil {
+		return ActivityState{}, fmt.Errorf("get activity state %d: %w", userID, err)
+	}
+	s.ActivityHash = uint32(hash)
+	return s, nil
+}
+
+func (p *Postgres) SaveActivityState(ctx context.Context, s ActivityState) error {
+	_, err := p.db.ExecContext(ctx, `
+		INSERT INTO activity_states (user_id, char_id, activity_hash, updated_at)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (user_id) DO UPDATE
+		  SET char_id = EXCLUDED.char_id,
+		      activity_hash = EXCLUDED.activity_hash,
+		      updated_at = EXCLUDED.updated_at`,
+		s.UserID, s.CharID, int64(s.ActivityHash), s.UpdatedAt)
 	return err
 }

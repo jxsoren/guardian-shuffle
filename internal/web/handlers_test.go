@@ -209,6 +209,46 @@ func TestCallback_RejectsInvalidState(t *testing.T) {
 	}
 }
 
+func TestSaveSettings_AcceptsEventMode(t *testing.T) {
+	st := store.NewMemory()
+	id, _ := st.UpsertUser(context.Background(), store.User{BungieMembershipID: "m1"})
+
+	h := &Handlers{Store: st, Sessions: stubSessions{id: id, ok: true}}
+	body := strings.NewReader("mode=event&enabled=on")
+	req := httptest.NewRequest(http.MethodPost, "/settings", body)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	h.SaveSettings(w, req)
+
+	if w.Code != http.StatusFound {
+		t.Fatalf("want 302, got %d: %s", w.Code, w.Body.String())
+	}
+	got, _ := st.GetSettings(context.Background(), id)
+	if got.TriggerMode != "event" {
+		t.Fatalf("expected trigger_mode=event, got %q", got.TriggerMode)
+	}
+}
+
+func TestSaveSettings_UnknownModeFallsBackToManual(t *testing.T) {
+	st := store.NewMemory()
+	id, _ := st.UpsertUser(context.Background(), store.User{BungieMembershipID: "m2"})
+
+	h := &Handlers{Store: st, Sessions: stubSessions{id: id, ok: true}}
+	body := strings.NewReader("mode=bogus&enabled=on")
+	req := httptest.NewRequest(http.MethodPost, "/settings", body)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	h.SaveSettings(w, req)
+
+	if w.Code != http.StatusFound {
+		t.Fatalf("want 302, got %d: %s", w.Code, w.Body.String())
+	}
+	got, _ := st.GetSettings(context.Background(), id)
+	if got.TriggerMode != "manual" {
+		t.Fatalf("expected fallback to manual, got %q", got.TriggerMode)
+	}
+}
+
 func TestCallback_AcceptsMatchingState(t *testing.T) {
 	sm := NewCookieSessions([]byte("0123456789abcdef0123456789abcdef"), false)
 	h := &Handlers{
