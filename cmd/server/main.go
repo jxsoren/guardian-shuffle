@@ -44,8 +44,10 @@ func main() {
 		log.Fatalf("crypto: %v", err)
 	}
 
-	api := bungie.NewClient(cfg.BungieAPIKey, bungieBase, http.DefaultClient)
-	tokens := auth.NewTokenManager(pg, box, cfg.BungieClientID, cfg.BungieClientSecret, bungieBase, http.DefaultClient)
+	bungieHTTP := &http.Client{Timeout: 15 * time.Second}
+
+	api := bungie.NewClient(cfg.BungieAPIKey, bungieBase, bungieHTTP)
+	tokens := auth.NewTokenManager(pg, box, cfg.BungieClientID, cfg.BungieClientSecret, bungieBase, bungieHTTP)
 
 	// Emblem hash set: fetched once at boot, refreshed daily in the background.
 	var (
