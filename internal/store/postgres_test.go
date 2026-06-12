@@ -82,7 +82,7 @@ func TestPostgres_ActivityState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.UserID != id || got.CharID != "c1" || got.ActivityHash != 42 {
+	if got.UserID != id || got.CharID != "c1" || got.ActivityHash != 42 || !got.UpdatedAt.Equal(now) {
 		t.Fatalf("unexpected state: %+v", got)
 	}
 }
@@ -92,11 +92,21 @@ func TestPostgres_EventModeUsers(t *testing.T) {
 	pg := newTestPostgres(t)
 	defer pg.Close()
 
-	id1, _ := pg.UpsertUser(ctx, User{BungieMembershipID: "ev1", MembershipType: 3, PrimaryCharacterID: "c1"})
-	id2, _ := pg.UpsertUser(ctx, User{BungieMembershipID: "ev2", MembershipType: 3, PrimaryCharacterID: "c2"})
+	id1, err := pg.UpsertUser(ctx, User{BungieMembershipID: "ev1", MembershipType: 3, PrimaryCharacterID: "c1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id2, err := pg.UpsertUser(ctx, User{BungieMembershipID: "ev2", MembershipType: 3, PrimaryCharacterID: "c2"})
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	_ = pg.SaveSettings(ctx, Settings{UserID: id1, Enabled: true, TriggerMode: "event"})
-	_ = pg.SaveSettings(ctx, Settings{UserID: id2, Enabled: false, TriggerMode: "event"})
+	if err := pg.SaveSettings(ctx, Settings{UserID: id1, Enabled: true, TriggerMode: "event"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := pg.SaveSettings(ctx, Settings{UserID: id2, Enabled: false, TriggerMode: "event"}); err != nil {
+		t.Fatal(err)
+	}
 
 	users, err := pg.EventModeUsers(ctx)
 	if err != nil {
