@@ -2,8 +2,10 @@ package bungie
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -11,6 +13,12 @@ func TestGetProfile_ParsesAndSendsAPIKey(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-API-Key") != "test-key" {
 			t.Errorf("missing API key header")
+		}
+		if !strings.Contains(r.URL.String(), "components=100,102,200,201,205") {
+			t.Errorf("missing/incorrect components in URL: %s", r.URL.String())
+		}
+		if !strings.Contains(r.URL.Path, "/Platform/Destiny2/3/Profile/m1/") {
+			t.Errorf("unexpected profile path: %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"Response":{"characters":{"data":{"c1":{"characterId":"c1","dateLastPlayed":"2026-06-10T00:00:00Z"}}}},"ErrorCode":1}`))
@@ -29,6 +37,14 @@ func TestGetProfile_ParsesAndSendsAPIKey(t *testing.T) {
 
 func TestEquipItem_NonOneErrorCodeIsError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Content-Type") != "application/json" {
+			t.Errorf("expected application/json, got %q", r.Header.Get("Content-Type"))
+		}
+		b, _ := io.ReadAll(r.Body)
+		body := string(b)
+		if !strings.Contains(body, `"itemId":"inst"`) || !strings.Contains(body, `"characterId":"char"`) || !strings.Contains(body, `"membershipType":3`) {
+			t.Errorf("unexpected equip body: %s", body)
+		}
 		_, _ = w.Write([]byte(`{"ErrorCode":1665,"ErrorStatus":"DestinyItemActionForbidden","Message":"in activity"}`))
 	}))
 	defer srv.Close()

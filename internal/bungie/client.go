@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 )
 
 // API is the surface the rest of the app depends on, so it can be faked in tests.
@@ -35,7 +36,10 @@ const profileComponents = "100,102,200,201,205"
 
 func (c *Client) GetProfile(ctx context.Context, token string, mType int64, mID string) (*ProfileResponse, error) {
 	url := fmt.Sprintf("%s/Platform/Destiny2/%d/Profile/%s/?components=%s", c.baseURL, mType, mID, profileComponents)
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build profile request: %w", err)
+	}
 	c.authHeaders(req, token)
 	var out ProfileResponse
 	if err := c.do(req, &out); err != nil {
@@ -60,9 +64,15 @@ type basicResponse struct {
 }
 
 func (c *Client) EquipItem(ctx context.Context, token, itemInstanceID, characterID string, mType int64) error {
-	body, _ := json.Marshal(equipBody{ItemID: itemInstanceID, CharacterID: characterID, MembershipType: mType})
+	body, err := json.Marshal(equipBody{ItemID: itemInstanceID, CharacterID: characterID, MembershipType: mType})
+	if err != nil {
+		return fmt.Errorf("marshal equip body: %w", err)
+	}
 	url := c.baseURL + "/Platform/Destiny2/Actions/Items/EquipItem/"
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("build equip request: %w", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	c.authHeaders(req, token)
 	var out basicResponse
@@ -108,10 +118,13 @@ type itemDef struct {
 // item hashes categorized as emblems. This is large (~tens of MB) and intended to
 // run rarely (cached by the caller and refreshed on manifest version change).
 func (c *Client) GetEmblemHashSet(ctx context.Context) (map[uint32]bool, error) {
-	manReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/Platform/Destiny2/Manifest/", nil)
+	manReq, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/Platform/Destiny2/Manifest/", nil)
+	if err != nil {
+		return nil, fmt.Errorf("build manifest request: %w", err)
+	}
 	c.authHeaders(manReq, "")
 	var man manifestResponse
-	if err := c.do(manReq, &man); err != nil {
+	if err = c.do(manReq, &man); err != nil {
 		return nil, err
 	}
 	if man.ErrorCode != 1 {
@@ -121,7 +134,10 @@ func (c *Client) GetEmblemHashSet(ctx context.Context) (map[uint32]bool, error) 
 	if path == "" {
 		return nil, fmt.Errorf("no en item definition path in manifest")
 	}
-	defReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
+	defReq, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build definitions request: %w", err)
+	}
 	c.authHeaders(defReq, "")
 	resp, err := c.http.Do(defReq)
 	if err != nil {
@@ -146,7 +162,6 @@ func (c *Client) GetEmblemHashSet(ctx context.Context) (map[uint32]bool, error) 
 }
 
 func parseHash(s string) uint32 {
-	var h uint32
-	_, _ = fmt.Sscanf(s, "%d", &h)
-	return h
+	h, _ := strconv.ParseUint(s, 10, 32)
+	return uint32(h)
 }
