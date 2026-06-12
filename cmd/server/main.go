@@ -14,6 +14,7 @@ import (
 	"github.com/jsorensen/guardian_shuffle/internal/bungie"
 	"github.com/jsorensen/guardian_shuffle/internal/config"
 	"github.com/jsorensen/guardian_shuffle/internal/cryptobox"
+	"github.com/jsorensen/guardian_shuffle/internal/poller"
 	"github.com/jsorensen/guardian_shuffle/internal/scheduler"
 	"github.com/jsorensen/guardian_shuffle/internal/store"
 	"github.com/jsorensen/guardian_shuffle/internal/swap"
@@ -110,6 +111,9 @@ func main() {
 
 	sched := scheduler.New(pg, engine)
 	go sched.Run(ctx, time.Minute)
+
+	pool := poller.NewPool(pg, api, tokens.ValidAccessToken, engine)
+	go pool.Run(ctx, 30*time.Second)
 
 	handlers := &web.Handlers{
 		Store:        pg,
