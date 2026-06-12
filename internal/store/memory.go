@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-
 type Memory struct {
 	mu       sync.Mutex
 	nextID   int64

@@ -26,6 +26,7 @@ func NewPostgres(ctx context.Context, url string) (*Postgres, error) {
 		return nil, err
 	}
 	if err := db.PingContext(ctx); err != nil {
+		db.Close()
 		return nil, err
 	}
 	return &Postgres{db: db}, nil
