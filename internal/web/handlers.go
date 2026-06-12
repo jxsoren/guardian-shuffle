@@ -104,7 +104,10 @@ func (h *Handlers) SaveSettings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	_ = r.ParseForm()
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
 	interval, _ := strconv.ParseInt(r.FormValue("interval_seconds"), 10, 64)
 	mode := r.FormValue("mode")
 	if mode != "scheduled" {
