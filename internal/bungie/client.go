@@ -13,6 +13,7 @@ import (
 type API interface {
 	GetProfile(ctx context.Context, accessToken string, membershipType int64, membershipID string) (*ProfileResponse, error)
 	EquipItem(ctx context.Context, accessToken, itemInstanceID, characterID string, membershipType int64) error
+	GetCharacterActivities(ctx context.Context, token string, mType int64, mID, charID string) (uint32, error)
 }
 
 type Client struct {
@@ -159,6 +160,24 @@ func (c *Client) GetEmblemHashSet(ctx context.Context) (map[uint32]bool, error) 
 		}
 	}
 	return set, nil
+}
+
+func (c *Client) GetCharacterActivities(ctx context.Context, token string, mType int64, mID, charID string) (uint32, error) {
+	url := fmt.Sprintf("%s/Platform/Destiny2/%d/Profile/%s/Character/%s/?components=204",
+		c.baseURL, mType, mID, charID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return 0, fmt.Errorf("build character activities request: %w", err)
+	}
+	c.authHeaders(req, token)
+	var out CharacterActivitiesResponse
+	if err := c.do(req, &out); err != nil {
+		return 0, err
+	}
+	if out.ErrorCode != 1 {
+		return 0, fmt.Errorf("character activities error %d %s: %s", out.ErrorCode, out.ErrorStatus, out.Message)
+	}
+	return out.Response.Activities.Data.CurrentActivityHash, nil
 }
 
 func parseHash(s string) uint32 {

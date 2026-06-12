@@ -50,3 +50,16 @@ type ProfileResponse struct {
 	ErrorStatus string `json:"ErrorStatus"`
 	Message     string `json:"Message"`
 }
+
+type CharacterActivitiesResponse struct {
+	Response struct {
+		Activities struct {
+			Data struct {
+				CurrentActivityHash uint32 `json:"currentActivityHash"`
+			} `json:"data"`
+		} `json:"activities"`
+	} `json:"Response"`
+	ErrorCode   int    `json:"ErrorCode"`
+	ErrorStatus string `json:"ErrorStatus"`
+	Message     string `json:"Message"`
+}

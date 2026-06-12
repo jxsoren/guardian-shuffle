@@ -86,6 +86,45 @@ func TestPrimaryDestinyMembership_FallsBackToFirst(t *testing.T) {
 	}
 }
 
+func TestGetCharacterActivities_ReturnsHash(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-API-Key") != "test-key" {
+			t.Errorf("missing API key")
+		}
+		if !strings.Contains(r.URL.String(), "components=204") {
+			t.Errorf("missing components=204 in URL: %s", r.URL)
+		}
+		if !strings.Contains(r.URL.Path, "/Platform/Destiny2/3/Profile/m1/Character/c1/") {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"Response":{"activities":{"data":{"currentActivityHash":999}}},"ErrorCode":1}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient("test-key", srv.URL, srv.Client())
+	hash, err := c.GetCharacterActivities(context.Background(), "tok", 3, "m1", "c1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hash != 999 {
+		t.Fatalf("expected hash 999, got %d", hash)
+	}
+}
+
+func TestGetCharacterActivities_NonOneErrorCodeIsError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"ErrorCode":5,"ErrorStatus":"SystemDisabled","Message":"maintenance"}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient("k", srv.URL, srv.Client())
+	_, err := c.GetCharacterActivities(context.Background(), "tok", 3, "m1", "c1")
+	if err == nil {
+		t.Fatal("expected error for non-1 ErrorCode")
+	}
+}
+
 func TestGetEmblemHashSet_FiltersByCategory(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/Platform/Destiny2/Manifest/", func(w http.ResponseWriter, r *http.Request) {
