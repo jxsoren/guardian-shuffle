@@ -2,6 +2,7 @@ package swap
 
 import (
 	"context"
+	"errors"
 	"math/rand"
 	"testing"
 	"time"
@@ -63,6 +64,36 @@ func TestCycleUser_EquipsAnInventoryEmblem(t *testing.T) {
 	}
 	if api.equipped[0] != "inv1" && api.equipped[0] != "inv2" {
 		t.Fatalf("equipped unexpected instance %q", api.equipped[0])
+	}
+	s, err := st.GetSettings(ctx, id)
+	if err != nil || s.LastCycledAt == nil {
+		t.Fatalf("expected LastCycledAt to be set after successful cycle, got settings=%+v err=%v", s, err)
+	}
+}
+
+func TestCycleUser_EquipItemError(t *testing.T) {
+	ctx := context.Background()
+	st := store.NewMemory()
+	id, _ := st.UpsertUser(ctx, store.User{BungieMembershipID: "m1", MembershipType: 3, PrimaryCharacterID: "c1"})
+	p := &bungie.ProfileResponse{}
+	p.Response.Characters.Data = map[string]bungie.Character{"c1": {CharacterID: "c1", DateLastPlayed: "2026-06-10T00:00:00Z"}}
+	p.Response.CharacterEquipment.Data = map[string]bungie.ItemList{
+		"c1": {Items: []bungie.Item{{ItemHash: 100, ItemInstanceID: "eqp", BucketHash: bungie.EmblemBucketHash}}},
+	}
+	p.Response.CharacterInventories.Data = map[string]bungie.ItemList{
+		"c1": {Items: []bungie.Item{{ItemHash: 200, ItemInstanceID: "inv1", BucketHash: 1469714392}}},
+	}
+	api := &fakeAPI{profile: p, equipErr: errors.New("equip failed")}
+
+	eng := newEngine(api, st)
+	err := eng.CycleUser(ctx, id, time.Now())
+	if err == nil {
+		t.Fatal("expected error when EquipItem fails")
+	}
+	// On equip failure, LastCycledAt must NOT be set.
+	s, _ := st.GetSettings(ctx, id)
+	if s.LastCycledAt != nil {
+		t.Fatalf("LastCycledAt should not be set after a failed equip, got %v", s.LastCycledAt)
 	}
 }
 
