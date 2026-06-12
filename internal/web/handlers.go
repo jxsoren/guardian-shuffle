@@ -138,7 +138,10 @@ func (h *Handlers) SaveSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	interval, _ := strconv.ParseInt(r.FormValue("interval_seconds"), 10, 64)
 	mode := r.FormValue("mode")
-	if mode != "scheduled" {
+	switch mode {
+	case "scheduled", "event":
+		// keep as-is
+	default:
 		mode = "manual"
 	}
 	if mode == "scheduled" && interval < 60 {
