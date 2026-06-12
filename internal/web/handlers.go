@@ -29,6 +29,10 @@ type Cycler interface {
 type SessionManager interface {
 	UserID(r *http.Request) (int64, bool)
 	SetUserID(w http.ResponseWriter, userID int64)
+	// SetState generates a random nonce, stores it in a signed cookie, and returns the nonce.
+	SetState(w http.ResponseWriter) string
+	// ConsumeState validates state against the stored cookie and clears it; returns false if invalid.
+	ConsumeState(w http.ResponseWriter, r *http.Request, state string) bool
 }
 
 // TokenService is the subset of the OAuth token manager the handlers need.
@@ -54,15 +58,22 @@ type Handlers struct {
 }
 
 func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
+	state := h.Sessions.SetState(w)
 	q := url.Values{
 		"response_type": {"code"},
 		"client_id":     {h.ClientID},
+		"state":         {state},
 	}
 	http.Redirect(w, r, h.AuthorizeURL+"?"+q.Encode(), http.StatusFound)
 }
 
 // Callback handles the OAuth redirect: exchange code, look up membership, create session.
 func (h *Handlers) Callback(w http.ResponseWriter, r *http.Request) {
+	state := r.URL.Query().Get("state")
+	if !h.Sessions.ConsumeState(w, r, state) {
+		http.Error(w, "invalid state", http.StatusBadRequest)
+		return
+	}
 	code := r.URL.Query().Get("code")
 	if code == "" {
 		http.Error(w, "missing code", http.StatusBadRequest)
@@ -70,21 +81,21 @@ func (h *Handlers) Callback(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := h.Tokens.Exchange(r.Context(), code)
 	if err != nil {
-		http.Error(w, "token exchange failed", http.StatusBadGateway)
+		http.Error(w, "internal error", http.StatusBadGateway)
 		return
 	}
 	mType, mID, err := h.Memberships.PrimaryDestinyMembership(r.Context(), resp.AccessToken)
 	if err != nil {
-		http.Error(w, "could not resolve destiny membership", http.StatusBadGateway)
+		http.Error(w, "internal error", http.StatusBadGateway)
 		return
 	}
 	id, err := h.Store.UpsertUser(r.Context(), store.User{BungieMembershipID: mID, MembershipType: mType})
 	if err != nil {
-		http.Error(w, "user upsert failed", http.StatusInternalServerError)
+		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 	if err := h.Tokens.Persist(r.Context(), id, resp, time.Now()); err != nil {
-		http.Error(w, "token persist failed", http.StatusInternalServerError)
+		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 	h.Sessions.SetUserID(w, id)
@@ -139,7 +150,7 @@ func (h *Handlers) SaveSettings(w http.ResponseWriter, r *http.Request) {
 	cur.TriggerMode = mode
 	cur.IntervalSeconds = interval
 	if err := h.Store.SaveSettings(r.Context(), cur); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 	http.Redirect(w, r, "/", http.StatusFound)
@@ -152,7 +163,7 @@ func (h *Handlers) CycleNow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.Cycler.CycleUser(r.Context(), id, time.Now()); err != nil {
-		fmt.Fprintf(w, "Cycle failed: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 	fmt.Fprint(w, "Emblem cycled!")

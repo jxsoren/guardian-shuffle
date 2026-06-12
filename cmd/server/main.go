@@ -44,26 +44,47 @@ func main() {
 		log.Fatalf("crypto: %v", err)
 	}
 
-	api := bungie.NewClient(cfg.BungieAPIKey, bungieBase, http.DefaultClient)
-	tokens := auth.NewTokenManager(pg, box, cfg.BungieClientID, cfg.BungieClientSecret, bungieBase, http.DefaultClient)
+	bungieHTTP := &http.Client{Timeout: 15 * time.Second}
+
+	api := bungie.NewClient(cfg.BungieAPIKey, bungieBase, bungieHTTP)
+	tokens := auth.NewTokenManager(pg, box, cfg.BungieClientID, cfg.BungieClientSecret, bungieBase, bungieHTTP)
 
 	// Emblem hash set: fetched once at boot, refreshed daily in the background.
 	var (
 		emblemMu  sync.RWMutex
 		emblemSet = map[uint32]bool{}
 	)
-	refreshEmblems := func() {
+	refreshEmblems := func() bool {
 		set, err := api.GetEmblemHashSet(ctx)
 		if err != nil {
 			log.Printf("manifest: emblem set refresh failed: %v", err)
-			return
+			return false
 		}
 		emblemMu.Lock()
 		emblemSet = set
 		emblemMu.Unlock()
 		log.Printf("manifest: loaded %d emblem hashes", len(set))
+		return true
 	}
-	refreshEmblems()
+
+	// Initial load with retry.
+	func() {
+		delays := []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second}
+		if refreshEmblems() {
+			return
+		}
+		for _, d := range delays {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(d):
+			}
+			if refreshEmblems() {
+				return
+			}
+		}
+	}()
+
 	go func() {
 		t := time.NewTicker(24 * time.Hour)
 		defer t.Stop()
@@ -95,7 +116,7 @@ func main() {
 		Tokens:       tokens,
 		Memberships:  api,
 		Cycler:       engine,
-		Sessions:     web.NewCookieSessions(cfg.EncryptionKey),
+		Sessions:     web.NewCookieSessions(cfg.HMACKey, cfg.SecureCookies),
 		ClientID:     cfg.BungieClientID,
 		BaseURL:      cfg.BaseURL,
 		AuthorizeURL: bungieBase + "/en/OAuth/Authorize",

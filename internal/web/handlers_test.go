@@ -2,8 +2,10 @@ package web
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -21,8 +23,10 @@ type stubSessions struct {
 	ok bool
 }
 
-func (s stubSessions) UserID(*http.Request) (int64, bool)   { return s.id, s.ok }
-func (s stubSessions) SetUserID(http.ResponseWriter, int64) {}
+func (s stubSessions) UserID(*http.Request) (int64, bool)                              { return s.id, s.ok }
+func (s stubSessions) SetUserID(http.ResponseWriter, int64)                             {}
+func (s stubSessions) SetState(http.ResponseWriter) string                              { return "stub-state" }
+func (s stubSessions) ConsumeState(http.ResponseWriter, *http.Request, string) bool     { return true }
 
 type stubTokens struct {
 	resp      auth.TokenResponse
@@ -44,6 +48,15 @@ type stubResolver struct {
 
 func (s stubResolver) PrimaryDestinyMembership(context.Context, string) (int64, string, error) {
 	return s.mType, s.mID, nil
+}
+
+type errTokens struct{}
+
+func (errTokens) Exchange(context.Context, string) (auth.TokenResponse, error) {
+	return auth.TokenResponse{}, fmt.Errorf("dial timeout")
+}
+func (errTokens) Persist(context.Context, int64, auth.TokenResponse, time.Time) error {
+	return nil
 }
 
 func TestCallback_ResolvesAndStoresDestinyMembership(t *testing.T) {
@@ -81,6 +94,7 @@ func TestLoginRedirectsToBungie(t *testing.T) {
 		ClientID:     "cid",
 		BaseURL:      "http://localhost:8080",
 		AuthorizeURL: "https://www.bungie.net/en/OAuth/Authorize",
+		Sessions:     stubSessions{},
 	}
 	req := httptest.NewRequest(http.MethodGet, "/login", nil)
 	w := httptest.NewRecorder()
@@ -114,5 +128,112 @@ func TestCycleNow_WithSession(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "cycled") {
 		t.Fatalf("expected success message, got %q", w.Body.String())
+	}
+}
+
+func TestCallback_GenericErrorOnTokenFailure(t *testing.T) {
+	h := &Handlers{
+		Store:        store.NewMemory(),
+		Tokens:       errTokens{},
+		Memberships:  stubResolver{},
+		Sessions:     stubSessions{},
+		AuthorizeURL: "https://www.bungie.net/en/OAuth/Authorize",
+	}
+	req := httptest.NewRequest(http.MethodGet, "/callback?code=abc", nil)
+	w := httptest.NewRecorder()
+	h.Callback(w, req)
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("want 502, got %d", w.Code)
+	}
+	if strings.Contains(w.Body.String(), "dial timeout") {
+		t.Fatalf("body must not expose internal error: %q", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "internal error") {
+		t.Fatalf("body should say 'internal error', got %q", w.Body.String())
+	}
+}
+
+func TestLogin_IncludesStateParam(t *testing.T) {
+	sm := NewCookieSessions([]byte("0123456789abcdef0123456789abcdef"), false)
+	h := &Handlers{
+		ClientID:     "cid",
+		AuthorizeURL: "https://www.bungie.net/en/OAuth/Authorize",
+		Sessions:     sm,
+	}
+	req := httptest.NewRequest(http.MethodGet, "/login", nil)
+	w := httptest.NewRecorder()
+	h.Login(w, req)
+
+	loc := w.Header().Get("Location")
+	u, err := url.Parse(loc)
+	if err != nil {
+		t.Fatalf("bad redirect URL: %v", err)
+	}
+	if u.Query().Get("state") == "" {
+		t.Fatalf("redirect URL missing state param: %s", loc)
+	}
+	var found bool
+	for _, c := range w.Result().Cookies() {
+		if c.Name == "gs_oauth_state" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected gs_oauth_state cookie to be set")
+	}
+}
+
+func TestCallback_RejectsInvalidState(t *testing.T) {
+	sm := NewCookieSessions([]byte("0123456789abcdef0123456789abcdef"), false)
+	h := &Handlers{
+		Store:        store.NewMemory(),
+		Tokens:       &stubTokens{resp: auth.TokenResponse{AccessToken: "acc"}},
+		Memberships:  stubResolver{mType: 3, mID: "destiny-id"},
+		Sessions:     sm,
+		AuthorizeURL: "https://www.bungie.net/en/OAuth/Authorize",
+		ClientID:     "cid",
+	}
+	// Get a real state cookie via Login.
+	lw := httptest.NewRecorder()
+	h.Login(lw, httptest.NewRequest(http.MethodGet, "/login", nil))
+
+	// Use the wrong state value in the callback.
+	req := httptest.NewRequest(http.MethodGet, "/callback?code=abc&state=wrongstate", nil)
+	for _, c := range lw.Result().Cookies() {
+		req.AddCookie(c)
+	}
+	w := httptest.NewRecorder()
+	h.Callback(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400 on state mismatch, got %d", w.Code)
+	}
+}
+
+func TestCallback_AcceptsMatchingState(t *testing.T) {
+	sm := NewCookieSessions([]byte("0123456789abcdef0123456789abcdef"), false)
+	h := &Handlers{
+		Store:        store.NewMemory(),
+		Tokens:       &stubTokens{resp: auth.TokenResponse{AccessToken: "acc"}},
+		Memberships:  stubResolver{mType: 3, mID: "destiny-id"},
+		Sessions:     sm,
+		AuthorizeURL: "https://www.bungie.net/en/OAuth/Authorize",
+		ClientID:     "cid",
+	}
+	// Get the state nonce from Login.
+	lw := httptest.NewRecorder()
+	h.Login(lw, httptest.NewRequest(http.MethodGet, "/login", nil))
+	loc := lw.Header().Get("Location")
+	u, _ := url.Parse(loc)
+	nonce := u.Query().Get("state")
+
+	// Callback with the matching nonce.
+	req := httptest.NewRequest(http.MethodGet, "/callback?code=abc&state="+nonce, nil)
+	for _, c := range lw.Result().Cookies() {
+		req.AddCookie(c)
+	}
+	w := httptest.NewRecorder()
+	h.Callback(w, req)
+	if w.Code != http.StatusFound {
+		t.Fatalf("want 302, got %d: %s", w.Code, w.Body.String())
 	}
 }
