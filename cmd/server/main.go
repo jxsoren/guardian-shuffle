@@ -114,7 +114,7 @@ func main() {
 		Tokens:       tokens,
 		Memberships:  api,
 		Cycler:       engine,
-		Sessions:     web.NewCookieSessions(cfg.EncryptionKey),
+		Sessions:     web.NewCookieSessions(cfg.HMACKey),
 		ClientID:     cfg.BungieClientID,
 		BaseURL:      cfg.BaseURL,
 		AuthorizeURL: bungieBase + "/en/OAuth/Authorize",

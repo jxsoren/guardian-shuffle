@@ -3,6 +3,8 @@
 package config
 
 import (
+	"crypto/hkdf"
+	"crypto/sha256"
 	"fmt"
 	"os"
 )
@@ -13,7 +15,8 @@ type Config struct {
 	BungieClientID     string
 	BungieClientSecret string
 	BaseURL            string
-	EncryptionKey      []byte // exactly 32 bytes for AES-256
+	EncryptionKey      []byte // 32 bytes, AES-256
+	HMACKey            []byte // 32 bytes, HMAC session signing (HKDF-derived)
 	ListenAddr         string
 }
 
@@ -40,6 +43,11 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("TOKEN_ENCRYPTION_KEY must be 32 bytes, got %d", len(key))
 	}
 	c.EncryptionKey = []byte(key)
+	hmacKey, err := hkdf.Key(sha256.New, c.EncryptionKey, nil, "guardian-shuffle-session-hmac-v1", 32)
+	if err != nil {
+		return Config{}, fmt.Errorf("hkdf key derivation: %w", err)
+	}
+	c.HMACKey = hmacKey
 	return c, nil
 }
 
