@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Guardian Shuffle</title>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+  <h1>Guardian Shuffle</h1>
+  {{if .LoggedIn}}
+    <p>Signed in as membership {{.MembershipID}}.</p>
+    <form method="post" action="/settings">
+      <label><input type="checkbox" name="enabled" {{if .Enabled}}checked{{end}}> Enabled</label><br>
+      <label>Mode:
+        <select name="mode">
+          <option value="manual" {{if eq .Mode "manual"}}selected{{end}}>Manual</option>
+          <option value="scheduled" {{if eq .Mode "scheduled"}}selected{{end}}>Scheduled</option>
+        </select>
+      </label><br>
+      <label>Interval (seconds): <input type="number" name="interval_seconds" value="{{.IntervalSeconds}}" min="60"></label><br>
+      <button type="submit">Save settings</button>
+    </form>
+    <button hx-post="/cycle-now" hx-target="#result" hx-swap="innerHTML">Cycle now</button>
+    <div id="result"></div>
+  {{else}}
+    <a href="/login">Sign in with Bungie</a>
+  {{end}}
+</body>
+</html>
