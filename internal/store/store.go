@@ -24,9 +24,16 @@ type Tokens struct {
 type Settings struct {
 	UserID          int64
 	Enabled         bool
-	TriggerMode     string // "manual" | "scheduled"
+	TriggerMode     string // "manual" | "scheduled" | "event"
 	IntervalSeconds int64
 	LastCycledAt    *time.Time
+}
+
+type ActivityState struct {
+	UserID       int64
+	CharID       string
+	ActivityHash uint32
+	UpdatedAt    time.Time
 }
 
 type Store interface {
@@ -40,4 +47,10 @@ type Store interface {
 	// DueUsers returns IDs of enabled, scheduled users whose interval has elapsed by now.
 	DueUsers(ctx context.Context, now time.Time) ([]int64, error)
 	RecordSwap(ctx context.Context, userID int64, fromHash, toHash uint32, status string) error
+	// EventModeUsers returns all enabled users with TriggerMode == "event".
+	EventModeUsers(ctx context.Context) ([]User, error)
+	// GetActivityState returns the persisted activity state; returns zero-value (UserID==0) if none exists.
+	GetActivityState(ctx context.Context, userID int64) (ActivityState, error)
+	// SaveActivityState upserts the activity state for a user.
+	SaveActivityState(ctx context.Context, s ActivityState) error
 }

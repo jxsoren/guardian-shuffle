@@ -8,21 +8,23 @@ import (
 )
 
 type Memory struct {
-	mu       sync.Mutex
-	nextID   int64
-	byMember map[string]int64
-	users    map[int64]User
-	tokens   map[int64]Tokens
-	settings map[int64]Settings
+	mu             sync.Mutex
+	nextID         int64
+	byMember       map[string]int64
+	users          map[int64]User
+	tokens         map[int64]Tokens
+	settings       map[int64]Settings
+	activityStates map[int64]ActivityState
 }
 
 func NewMemory() *Memory {
 	return &Memory{
-		nextID:   1,
-		byMember: map[string]int64{},
-		users:    map[int64]User{},
-		tokens:   map[int64]Tokens{},
-		settings: map[int64]Settings{},
+		nextID:         1,
+		byMember:       map[string]int64{},
+		users:          map[int64]User{},
+		tokens:         map[int64]Tokens{},
+		settings:       map[int64]Settings{},
+		activityStates: map[int64]ActivityState{},
 	}
 }
 
@@ -103,4 +105,29 @@ func (m *Memory) DueUsers(_ context.Context, now time.Time) ([]int64, error) {
 
 func (m *Memory) RecordSwap(_ context.Context, userID int64, fromHash, toHash uint32, status string) error {
 	return nil // history retention is Phase 1-optional; no-op for the in-memory store
+}
+
+func (m *Memory) EventModeUsers(_ context.Context) ([]User, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var users []User
+	for id, s := range m.settings {
+		if s.Enabled && s.TriggerMode == "event" {
+			users = append(users, m.users[id])
+		}
+	}
+	return users, nil
+}
+
+func (m *Memory) GetActivityState(_ context.Context, userID int64) (ActivityState, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.activityStates[userID], nil // zero-value returned when key absent
+}
+
+func (m *Memory) SaveActivityState(_ context.Context, s ActivityState) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.activityStates[s.UserID] = s
+	return nil
 }

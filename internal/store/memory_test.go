@@ -67,3 +67,54 @@ func TestMemoryStore_DueUsers_ExactDeadline(t *testing.T) {
 		t.Fatalf("expected user due exactly at deadline, got %v", due)
 	}
 }
+
+func TestMemoryStore_ActivityState_MissingReturnsZero(t *testing.T) {
+	ctx := context.Background()
+	s := NewMemory()
+	got, err := s.GetActivityState(ctx, 99)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.UserID != 0 {
+		t.Fatalf("expected zero-value for missing user, got %+v", got)
+	}
+}
+
+func TestMemoryStore_ActivityState_RoundTrip(t *testing.T) {
+	ctx := context.Background()
+	s := NewMemory()
+	id, _ := s.UpsertUser(ctx, User{BungieMembershipID: "m1"})
+
+	state := ActivityState{UserID: id, CharID: "c1", ActivityHash: 12345, UpdatedAt: time.Now().Truncate(time.Second)}
+	if err := s.SaveActivityState(ctx, state); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetActivityState(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.UserID != id || got.CharID != "c1" || got.ActivityHash != 12345 {
+		t.Fatalf("unexpected state: %+v", got)
+	}
+}
+
+func TestMemoryStore_EventModeUsers(t *testing.T) {
+	ctx := context.Background()
+	s := NewMemory()
+
+	id1, _ := s.UpsertUser(ctx, User{BungieMembershipID: "m1"})
+	id2, _ := s.UpsertUser(ctx, User{BungieMembershipID: "m2"})
+	id3, _ := s.UpsertUser(ctx, User{BungieMembershipID: "m3"})
+
+	_ = s.SaveSettings(ctx, Settings{UserID: id1, Enabled: true, TriggerMode: "event"})
+	_ = s.SaveSettings(ctx, Settings{UserID: id2, Enabled: false, TriggerMode: "event"}) // disabled
+	_ = s.SaveSettings(ctx, Settings{UserID: id3, Enabled: true, TriggerMode: "scheduled"}) // wrong mode
+
+	users, err := s.EventModeUsers(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(users) != 1 || users[0].ID != id1 {
+		t.Fatalf("expected only user %d, got %+v", id1, users)
+	}
+}

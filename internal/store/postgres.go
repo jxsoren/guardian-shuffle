@@ -145,3 +145,18 @@ func (p *Postgres) RecordSwap(ctx context.Context, userID int64, fromHash, toHas
 		userID, int64(fromHash), int64(toHash), status)
 	return err
 }
+
+// EventModeUsers — TODO(Task 3): implement SQL query.
+func (p *Postgres) EventModeUsers(ctx context.Context) ([]User, error) {
+	return nil, fmt.Errorf("EventModeUsers: not yet implemented for Postgres")
+}
+
+// GetActivityState — TODO(Task 3): implement SQL query.
+func (p *Postgres) GetActivityState(ctx context.Context, userID int64) (ActivityState, error) {
+	return ActivityState{}, fmt.Errorf("GetActivityState: not yet implemented for Postgres")
+}
+
+// SaveActivityState — TODO(Task 3): implement SQL query.
+func (p *Postgres) SaveActivityState(ctx context.Context, s ActivityState) error {
+	return fmt.Errorf("SaveActivityState: not yet implemented for Postgres")
+}
