@@ -56,6 +56,36 @@ func TestEquipItem_NonOneErrorCodeIsError(t *testing.T) {
 	}
 }
 
+func TestPrimaryDestinyMembership(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer tok" {
+			t.Errorf("missing bearer token")
+		}
+		_, _ = w.Write([]byte(`{"Response":{"destinyMemberships":[{"membershipType":1,"membershipId":"aaa"},{"membershipType":3,"membershipId":"bbb"}],"primaryMembershipId":"bbb"},"ErrorCode":1}`))
+	}))
+	defer srv.Close()
+	c := NewClient("k", srv.URL, srv.Client())
+	mType, mID, err := c.PrimaryDestinyMembership(context.Background(), "tok")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mType != 3 || mID != "bbb" {
+		t.Fatalf("expected primary (3,bbb), got (%d,%q)", mType, mID)
+	}
+}
+
+func TestPrimaryDestinyMembership_FallsBackToFirst(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"Response":{"destinyMemberships":[{"membershipType":2,"membershipId":"only"}],"primaryMembershipId":""},"ErrorCode":1}`))
+	}))
+	defer srv.Close()
+	c := NewClient("k", srv.URL, srv.Client())
+	mType, mID, err := c.PrimaryDestinyMembership(context.Background(), "tok")
+	if err != nil || mType != 2 || mID != "only" {
+		t.Fatalf("expected fallback (2,only), got (%d,%q) err=%v", mType, mID, err)
+	}
+}
+
 func TestGetEmblemHashSet_FiltersByCategory(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/Platform/Destiny2/Manifest/", func(w http.ResponseWriter, r *http.Request) {

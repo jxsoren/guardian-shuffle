@@ -93,6 +93,7 @@ func main() {
 	handlers := &web.Handlers{
 		Store:        pg,
 		Tokens:       tokens,
+		Memberships:  api,
 		Cycler:       engine,
 		Sessions:     web.NewCookieSessions(cfg.EncryptionKey),
 		ClientID:     cfg.BungieClientID,
@@ -107,7 +108,14 @@ func main() {
 	mux.HandleFunc("POST /settings", handlers.SaveSettings)
 	mux.HandleFunc("POST /cycle-now", handlers.CycleNow)
 
-	srv := &http.Server{Addr: cfg.ListenAddr, Handler: mux}
+	srv := &http.Server{
+		Addr:              cfg.ListenAddr,
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
 	go func() {
 		log.Printf("listening on %s", cfg.ListenAddr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {

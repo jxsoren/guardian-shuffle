@@ -16,7 +16,7 @@ import (
 
 const refreshSkew = 60 * time.Second // refresh a bit early to avoid races
 
-type tokenResponse struct {
+type TokenResponse struct {
 	AccessToken      string `json:"access_token"`
 	RefreshToken     string `json:"refresh_token"`
 	ExpiresIn        int64  `json:"expires_in"`
@@ -77,40 +77,40 @@ func (tm *TokenManager) ValidAccessToken(ctx context.Context, userID int64, now 
 }
 
 // Exchange swaps an authorization code for tokens (used by the OAuth callback).
-func (tm *TokenManager) Exchange(ctx context.Context, code string) (tokenResponse, error) {
+func (tm *TokenManager) Exchange(ctx context.Context, code string) (TokenResponse, error) {
 	return tm.requestTokenValue(ctx, url.Values{
 		"grant_type": {"authorization_code"},
 		"code":       {code},
 	})
 }
 
-func (tm *TokenManager) requestTokenValue(ctx context.Context, form url.Values) (tokenResponse, error) {
+func (tm *TokenManager) requestTokenValue(ctx context.Context, form url.Values) (TokenResponse, error) {
 	form.Set("client_id", tm.clientID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		tm.tokenBase+"/Platform/App/OAuth/Token/", strings.NewReader(form.Encode()))
 	if err != nil {
-		return tokenResponse{}, fmt.Errorf("build token request: %w", err)
+		return TokenResponse{}, fmt.Errorf("build token request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.SetBasicAuth(tm.clientID, tm.clientSecret)
 
 	resp, err := tm.httpClient.Do(req)
 	if err != nil {
-		return tokenResponse{}, err
+		return TokenResponse{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
-		return tokenResponse{}, fmt.Errorf("token endpoint status %d", resp.StatusCode)
+		return TokenResponse{}, fmt.Errorf("token endpoint status %d", resp.StatusCode)
 	}
-	var out tokenResponse
+	var out TokenResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return tokenResponse{}, err
+		return TokenResponse{}, err
 	}
 	return out, nil
 }
 
 // Persist encrypts and stores a token response. Exported for the OAuth callback.
-func (tm *TokenManager) Persist(ctx context.Context, userID int64, resp tokenResponse, now time.Time) error {
+func (tm *TokenManager) Persist(ctx context.Context, userID int64, resp TokenResponse, now time.Time) error {
 	accEnc, err := tm.box.Encrypt([]byte(resp.AccessToken))
 	if err != nil {
 		return err

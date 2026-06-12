@@ -165,3 +165,46 @@ func parseHash(s string) uint32 {
 	h, _ := strconv.ParseUint(s, 10, 32)
 	return uint32(h)
 }
+
+type membershipsResponse struct {
+	Response struct {
+		DestinyMemberships []struct {
+			MembershipType int64  `json:"membershipType"`
+			MembershipID   string `json:"membershipId"`
+		} `json:"destinyMemberships"`
+		PrimaryMembershipID string `json:"primaryMembershipId"`
+	} `json:"Response"`
+	ErrorCode   int    `json:"ErrorCode"`
+	ErrorStatus string `json:"ErrorStatus"`
+	Message     string `json:"Message"`
+}
+
+// PrimaryDestinyMembership returns the user's primary Destiny 2 membership
+// (platform type + id) given a valid access token. Needed to bootstrap a user,
+// since the OAuth response only carries the BungieNet membership id.
+func (c *Client) PrimaryDestinyMembership(ctx context.Context, accessToken string) (int64, string, error) {
+	url := c.baseURL + "/Platform/User/GetMembershipsForCurrentUser/"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return 0, "", fmt.Errorf("build memberships request: %w", err)
+	}
+	c.authHeaders(req, accessToken)
+	var out membershipsResponse
+	if err := c.do(req, &out); err != nil {
+		return 0, "", err
+	}
+	if out.ErrorCode != 1 {
+		return 0, "", fmt.Errorf("memberships error %d %s: %s", out.ErrorCode, out.ErrorStatus, out.Message)
+	}
+	dms := out.Response.DestinyMemberships
+	if len(dms) == 0 {
+		return 0, "", fmt.Errorf("no destiny memberships for user")
+	}
+	for _, m := range dms {
+		if m.MembershipID == out.Response.PrimaryMembershipID {
+			return m.MembershipType, m.MembershipID, nil
+		}
+	}
+	// No primary flagged (common for single-platform accounts): use the first.
+	return dms[0].MembershipType, dms[0].MembershipID, nil
+}

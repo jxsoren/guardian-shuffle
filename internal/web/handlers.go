@@ -31,9 +31,21 @@ type SessionManager interface {
 	SetUserID(w http.ResponseWriter, userID int64)
 }
 
+// TokenService is the subset of the OAuth token manager the handlers need.
+type TokenService interface {
+	Exchange(ctx context.Context, code string) (auth.TokenResponse, error)
+	Persist(ctx context.Context, userID int64, resp auth.TokenResponse, now time.Time) error
+}
+
+// MembershipResolver resolves a user's primary Destiny membership from an access token.
+type MembershipResolver interface {
+	PrimaryDestinyMembership(ctx context.Context, accessToken string) (membershipType int64, membershipID string, err error)
+}
+
 type Handlers struct {
 	Store        store.Store
-	Tokens       *auth.TokenManager
+	Tokens       TokenService
+	Memberships  MembershipResolver
 	Cycler       Cycler
 	Sessions     SessionManager
 	ClientID     string
@@ -61,7 +73,12 @@ func (h *Handlers) Callback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "token exchange failed", http.StatusBadGateway)
 		return
 	}
-	id, err := h.Store.UpsertUser(r.Context(), store.User{BungieMembershipID: resp.MembershipID})
+	mType, mID, err := h.Memberships.PrimaryDestinyMembership(r.Context(), resp.AccessToken)
+	if err != nil {
+		http.Error(w, "could not resolve destiny membership", http.StatusBadGateway)
+		return
+	}
+	id, err := h.Store.UpsertUser(r.Context(), store.User{BungieMembershipID: mID, MembershipType: mType})
 	if err != nil {
 		http.Error(w, "user upsert failed", http.StatusInternalServerError)
 		return
@@ -112,6 +129,9 @@ func (h *Handlers) SaveSettings(w http.ResponseWriter, r *http.Request) {
 	mode := r.FormValue("mode")
 	if mode != "scheduled" {
 		mode = "manual"
+	}
+	if mode == "scheduled" && interval < 60 {
+		interval = 60
 	}
 	cur, _ := h.Store.GetSettings(r.Context(), id)
 	cur.UserID = id
