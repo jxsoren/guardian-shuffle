@@ -1,0 +1,27 @@
+[app]
+name = "guardian-shuffle"
+primary_region = "sjc"
+
+[build]
+
+[http_service]
+internal_port = 8080
+force_https = true
+auto_stop_machines = "stop"
+auto_start_machines = true
+min_machines_running = 0
+
+[[http_service.checks]]
+grace_period = "10s"
+interval = "15s"
+method = "GET"
+path = "/health"
+timeout = "5s"
+
+[env]
+LISTEN_ADDR = ":8080"
+
+[[vm]]
+memory = "256mb"
+cpu_kind = "shared"
+cpus = 1

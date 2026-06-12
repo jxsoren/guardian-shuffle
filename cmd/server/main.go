@@ -127,6 +127,7 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	mux.HandleFunc("GET /", handlers.Dashboard)
 	mux.HandleFunc("GET /login", handlers.Login)
 	mux.HandleFunc("GET /callback", handlers.Callback)
