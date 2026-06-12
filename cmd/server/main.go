@@ -31,7 +31,22 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	pg, err := store.NewPostgres(ctx, cfg.DatabaseURL)
+	// Connect to Postgres with retry — the DB machine may still be waking up at boot.
+	var pg *store.Postgres
+	for _, d := range []time.Duration{0, 2 * time.Second, 4 * time.Second, 8 * time.Second, 8 * time.Second} {
+		if d > 0 {
+			select {
+			case <-ctx.Done():
+				log.Fatalf("db: %v", ctx.Err())
+			case <-time.After(d):
+			}
+		}
+		pg, err = store.NewPostgres(ctx, cfg.DatabaseURL)
+		if err == nil {
+			break
+		}
+		log.Printf("db: connect failed, retrying: %v", err)
+	}
 	if err != nil {
 		log.Fatalf("db: %v", err)
 	}

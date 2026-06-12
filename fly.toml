@@ -1,8 +1,8 @@
-[app]
-name = "guardian-shuffle"
+app = "guardian-shuffle-app"
 primary_region = "sjc"
 
 [build]
+  dockerfile = "Dockerfile"
 
 [http_service]
 internal_port = 8080
@@ -22,6 +22,6 @@ timeout = "5s"
 LISTEN_ADDR = ":8080"
 
 [[vm]]
-memory = "256mb"
+memory = "1gb"
 cpu_kind = "shared"
 cpus = 1
