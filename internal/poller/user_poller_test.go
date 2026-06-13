@@ -12,16 +12,20 @@ import (
 
 // fakeAPI returns a predetermined sequence of activity hashes.
 type fakeAPI struct {
-	hashes []uint32
-	idx    int
-	err    error
+	profile    *bungie.ProfileResponse
+	profileErr error
+	hashes     []uint32
+	idx        int
+	err        error
+	gotCharID  string // captures the charID passed to GetCharacterActivities
 }
 
 func (f *fakeAPI) GetProfile(context.Context, string, int64, string) (*bungie.ProfileResponse, error) {
-	return nil, nil
+	return f.profile, f.profileErr
 }
 func (f *fakeAPI) EquipItem(context.Context, string, string, string, int64) error { return nil }
-func (f *fakeAPI) GetCharacterActivities(_ context.Context, _ string, _ int64, _, _ string) (uint32, error) {
+func (f *fakeAPI) GetCharacterActivities(_ context.Context, _ string, _ int64, _, charID string) (uint32, error) {
+	f.gotCharID = charID
 	if f.err != nil {
 		return 0, f.err
 	}
@@ -33,6 +37,15 @@ func (f *fakeAPI) GetCharacterActivities(_ context.Context, _ string, _ int64, _
 	return h, nil
 }
 
+// profileWithChar builds a profile whose active (most-recently-played) character is charID.
+func profileWithChar(charID string) *bungie.ProfileResponse {
+	p := &bungie.ProfileResponse{}
+	p.Response.Characters.Data = map[string]bungie.Character{
+		charID: {CharacterID: charID, DateLastPlayed: "2024-01-01T00:00:00Z"},
+	}
+	return p
+}
+
 type stubCycler struct{ calls int }
 
 func (s *stubCycler) CycleUser(context.Context, int64, time.Time) error {
@@ -41,6 +54,9 @@ func (s *stubCycler) CycleUser(context.Context, int64, time.Time) error {
 }
 
 func newPoller(api *fakeAPI, cycler *stubCycler) *userPoller {
+	if api.profile == nil {
+		api.profile = profileWithChar("c1")
+	}
 	return &userPoller{
 		userID: 1,
 		user: store.User{
@@ -55,6 +71,28 @@ func newPoller(api *fakeAPI, cycler *stubCycler) *userPoller {
 			return "tok", nil
 		},
 		cycler: cycler,
+	}
+}
+
+func TestPoll_DerivesActiveCharacterFromProfile(t *testing.T) {
+	// Real users have an empty stored PrimaryCharacterID; the poller must still
+	// poll the active character it derives from the profile.
+	api := &fakeAPI{profile: profileWithChar("c1"), hashes: []uint32{999}}
+	cycler := &stubCycler{}
+	up := newPoller(api, cycler)
+	up.user.PrimaryCharacterID = ""
+
+	state := stateUnknown
+	_, stop := up.poll(context.Background(), &state)
+
+	if stop {
+		t.Fatal("should not stop")
+	}
+	if state != stateInActivity {
+		t.Fatalf("expected InActivity from derived-char poll, got %v", state)
+	}
+	if api.gotCharID != "c1" {
+		t.Fatalf("expected activities polled for derived char c1, got %q", api.gotCharID)
 	}
 }
 
@@ -174,11 +212,11 @@ func TestPoll_ReauthRequired_StopsPoller(t *testing.T) {
 	}
 }
 
-func TestPoll_NoCharacterID_SlowIntervalNoCycle(t *testing.T) {
-	api := &fakeAPI{hashes: []uint32{999}}
+func TestPoll_NoCharacterInProfile_SlowIntervalNoCycle(t *testing.T) {
+	// Profile has no characters -> ActiveCharacterID errors -> skip, don't poll activities.
+	api := &fakeAPI{profile: &bungie.ProfileResponse{}, hashes: []uint32{999}}
 	cycler := &stubCycler{}
 	up := newPoller(api, cycler)
-	up.user.PrimaryCharacterID = ""
 	state := stateUnknown
 
 	interval, stop := up.poll(context.Background(), &state)
@@ -190,7 +228,7 @@ func TestPoll_NoCharacterID_SlowIntervalNoCycle(t *testing.T) {
 		t.Fatalf("expected slowInterval, got %v", interval)
 	}
 	if api.idx != 0 {
-		t.Fatal("should not call API when no character ID")
+		t.Fatal("should not poll activities when profile has no character")
 	}
 }
 

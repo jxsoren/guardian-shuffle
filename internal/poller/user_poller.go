@@ -78,11 +78,6 @@ func (up *userPoller) run(ctx context.Context) {
 // poll makes one activity check, transitions the state machine, and returns
 // (nextInterval, shouldStop). shouldStop is true only on ErrReauthRequired.
 func (up *userPoller) poll(ctx context.Context, state *pollState) (time.Duration, bool) {
-	if up.user.PrimaryCharacterID == "" {
-		log.Printf("poller: user %d: no primary character ID, skipping", up.userID)
-		return slowInterval, false
-	}
-
 	token, err := up.getToken(ctx, up.userID, time.Now())
 	if errors.Is(err, reauthErr) {
 		log.Printf("poller: user %d: re-auth required, stopping", up.userID)
@@ -93,7 +88,25 @@ func (up *userPoller) poll(ctx context.Context, state *pollState) (time.Duration
 		return slowInterval, false
 	}
 
-	hash, err := up.api.GetCharacterActivities(ctx, token, up.user.MembershipType, up.user.BungieMembershipID, up.user.PrimaryCharacterID)
+	// Derive the active (most-recently-played) character live, the same way the
+	// swap engine does. The stored PrimaryCharacterID is never populated and would
+	// go stale when the player switches characters, so we don't rely on it.
+	profile, err := up.api.GetProfile(ctx, token, up.user.MembershipType, up.user.BungieMembershipID)
+	if err != nil {
+		if errors.Is(err, reauthErr) {
+			log.Printf("poller: user %d: re-auth required from profile call, stopping", up.userID)
+			return 0, true
+		}
+		log.Printf("poller: user %d: get profile: %v", up.userID, err)
+		return slowInterval, false
+	}
+	charID, err := bungie.ActiveCharacterID(profile)
+	if err != nil {
+		log.Printf("poller: user %d: no active character, skipping: %v", up.userID, err)
+		return slowInterval, false
+	}
+
+	hash, err := up.api.GetCharacterActivities(ctx, token, up.user.MembershipType, up.user.BungieMembershipID, charID)
 	if err != nil {
 		if errors.Is(err, reauthErr) {
 			log.Printf("poller: user %d: re-auth required from activities call, stopping", up.userID)
@@ -118,7 +131,7 @@ func (up *userPoller) poll(ctx context.Context, state *pollState) (time.Duration
 
 	if err := up.st.SaveActivityState(ctx, store.ActivityState{
 		UserID:       up.userID,
-		CharID:       up.user.PrimaryCharacterID,
+		CharID:       charID,
 		ActivityHash: hash,
 		UpdatedAt:    time.Now(),
 	}); err != nil {
