@@ -4,10 +4,18 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 )
+
+// ErrItemActionForbidden is returned by EquipItem when Bungie rejects the equip
+// because the player is in an activity (error code 1665, DestinyItemActionForbidden).
+// Items can only be equipped from orbit or other safe spaces (e.g. the Tower).
+var ErrItemActionForbidden = errors.New("cannot equip while in an activity")
+
+const codeItemActionForbidden = 1665
 
 // API is the surface the rest of the app depends on, so it can be faked in tests.
 type API interface {
@@ -81,6 +89,9 @@ func (c *Client) EquipItem(ctx context.Context, token, itemInstanceID, character
 		return err
 	}
 	if out.ErrorCode != 1 {
+		if out.ErrorCode == codeItemActionForbidden {
+			return fmt.Errorf("equip failed %d %s: %s: %w", out.ErrorCode, out.ErrorStatus, out.Message, ErrItemActionForbidden)
+		}
 		return fmt.Errorf("equip failed %d %s: %s", out.ErrorCode, out.ErrorStatus, out.Message)
 	}
 	return nil

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jsorensen/guardian_shuffle/internal/auth"
+	"github.com/jsorensen/guardian_shuffle/internal/bungie"
 	"github.com/jsorensen/guardian_shuffle/internal/store"
 )
 
@@ -23,10 +24,10 @@ type stubSessions struct {
 	ok bool
 }
 
-func (s stubSessions) UserID(*http.Request) (int64, bool)                              { return s.id, s.ok }
-func (s stubSessions) SetUserID(http.ResponseWriter, int64)                             {}
-func (s stubSessions) SetState(http.ResponseWriter) string                              { return "stub-state" }
-func (s stubSessions) ConsumeState(http.ResponseWriter, *http.Request, string) bool     { return true }
+func (s stubSessions) UserID(*http.Request) (int64, bool)                           { return s.id, s.ok }
+func (s stubSessions) SetUserID(http.ResponseWriter, int64)                         {}
+func (s stubSessions) SetState(http.ResponseWriter) string                          { return "stub-state" }
+func (s stubSessions) ConsumeState(http.ResponseWriter, *http.Request, string) bool { return true }
 
 type stubTokens struct {
 	resp      auth.TokenResponse
@@ -128,6 +129,22 @@ func TestCycleNow_WithSession(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "cycled") {
 		t.Fatalf("expected success message, got %q", w.Body.String())
+	}
+}
+
+func TestCycleNow_InActivityReturnsFriendlyError(t *testing.T) {
+	h := &Handlers{
+		Cycler:   stubCycler{err: fmt.Errorf("equip failed: %w", bungie.ErrItemActionForbidden)},
+		Sessions: stubSessions{id: 1, ok: true},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/cycle-now", nil)
+	w := httptest.NewRecorder()
+	h.CycleNow(w, req)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("want 409 for in-activity, got %d", w.Code)
+	}
+	if !strings.Contains(strings.ToLower(w.Body.String()), "activity") {
+		t.Fatalf("expected an activity-related message, got %q", w.Body.String())
 	}
 }
 

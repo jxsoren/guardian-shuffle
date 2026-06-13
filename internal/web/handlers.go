@@ -4,6 +4,7 @@ package web
 import (
 	"context"
 	"embed"
+	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jsorensen/guardian_shuffle/internal/auth"
+	"github.com/jsorensen/guardian_shuffle/internal/bungie"
 	"github.com/jsorensen/guardian_shuffle/internal/store"
 )
 
@@ -166,6 +168,10 @@ func (h *Handlers) CycleNow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.Cycler.CycleUser(r.Context(), id, time.Now()); err != nil {
+		if errors.Is(err, bungie.ErrItemActionForbidden) {
+			http.Error(w, "Can't change emblems while in an activity — head to orbit or the Tower and try again.", http.StatusConflict)
+			return
+		}
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}

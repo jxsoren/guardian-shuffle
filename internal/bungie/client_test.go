@@ -2,6 +2,7 @@ package bungie
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -45,7 +46,7 @@ func TestEquipItem_NonOneErrorCodeIsError(t *testing.T) {
 		if !strings.Contains(body, `"itemId":"inst"`) || !strings.Contains(body, `"characterId":"char"`) || !strings.Contains(body, `"membershipType":3`) {
 			t.Errorf("unexpected equip body: %s", body)
 		}
-		_, _ = w.Write([]byte(`{"ErrorCode":1665,"ErrorStatus":"DestinyItemActionForbidden","Message":"in activity"}`))
+		_, _ = w.Write([]byte(`{"ErrorCode":5,"ErrorStatus":"SystemDisabled","Message":"maintenance"}`))
 	}))
 	defer srv.Close()
 
@@ -53,6 +54,22 @@ func TestEquipItem_NonOneErrorCodeIsError(t *testing.T) {
 	err := c.EquipItem(context.Background(), "tok", "inst", "char", 3)
 	if err == nil {
 		t.Fatal("expected error for non-1 ErrorCode")
+	}
+	if errors.Is(err, ErrItemActionForbidden) {
+		t.Fatal("generic error should not be ErrItemActionForbidden")
+	}
+}
+
+func TestEquipItem_InActivityReturnsForbidden(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"ErrorCode":1665,"ErrorStatus":"DestinyItemActionForbidden","Message":"in activity"}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient("k", srv.URL, srv.Client())
+	err := c.EquipItem(context.Background(), "tok", "inst", "char", 3)
+	if !errors.Is(err, ErrItemActionForbidden) {
+		t.Fatalf("expected ErrItemActionForbidden, got %v", err)
 	}
 }
 
