@@ -140,11 +140,32 @@ func TestCycleNow_InActivityReturnsFriendlyError(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/cycle-now", nil)
 	w := httptest.NewRecorder()
 	h.CycleNow(w, req)
-	if w.Code != http.StatusConflict {
-		t.Fatalf("want 409 for in-activity, got %d", w.Code)
+	// htmx only swaps 2xx responses into the page, so the message must come
+	// back as 200 to be visible — not a 4xx.
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200 so htmx renders the message, got %d", w.Code)
 	}
 	if !strings.Contains(strings.ToLower(w.Body.String()), "activity") {
 		t.Fatalf("expected an activity-related message, got %q", w.Body.String())
+	}
+}
+
+func TestCycleNow_GenericErrorStillRendersMessage(t *testing.T) {
+	h := &Handlers{
+		Cycler:   stubCycler{err: fmt.Errorf("boom")},
+		Sessions: stubSessions{id: 1, ok: true},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/cycle-now", nil)
+	w := httptest.NewRecorder()
+	h.CycleNow(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200 so htmx renders feedback, got %d", w.Code)
+	}
+	if w.Body.Len() == 0 {
+		t.Fatal("expected a user-facing message, got empty body")
+	}
+	if strings.Contains(w.Body.String(), "boom") {
+		t.Fatalf("must not leak internal error detail, got %q", w.Body.String())
 	}
 }
 

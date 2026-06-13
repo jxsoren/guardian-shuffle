@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -167,12 +168,16 @@ func (h *Handlers) CycleNow(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
+	// This endpoint backs an htmx fragment (#result on the dashboard). htmx only
+	// swaps responses with a 2xx status, so every outcome the user should see is
+	// returned as 200 with a human-readable message.
 	if err := h.Cycler.CycleUser(r.Context(), id, time.Now()); err != nil {
 		if errors.Is(err, bungie.ErrItemActionForbidden) {
-			http.Error(w, "Can't change emblems while in an activity — head to orbit or the Tower and try again.", http.StatusConflict)
+			fmt.Fprint(w, "Can't change emblems while in an activity — head to orbit or the Tower and try again.")
 			return
 		}
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		log.Printf("cycle-now: user %d: %v", id, err)
+		fmt.Fprint(w, "Something went wrong cycling your emblem — please try again in a moment.")
 		return
 	}
 	fmt.Fprint(w, "Emblem cycled!")
