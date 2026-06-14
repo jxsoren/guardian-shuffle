@@ -83,25 +83,22 @@ func main() {
 		return true
 	}
 
-	// Initial load with retry.
-	func() {
-		delays := []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second}
-		if refreshEmblems() {
-			return
-		}
-		for _, d := range delays {
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(d):
+	// Load the emblem set in the background so a slow Bungie manifest fetch never
+	// delays the HTTP listener (and /health) at boot. Retries with backoff on the
+	// initial load, then refreshes daily.
+	go func() {
+		for _, d := range []time.Duration{0, 2 * time.Second, 4 * time.Second, 8 * time.Second} {
+			if d > 0 {
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(d):
+				}
 			}
 			if refreshEmblems() {
-				return
+				break
 			}
 		}
-	}()
-
-	go func() {
 		t := time.NewTicker(24 * time.Hour)
 		defer t.Stop()
 		for {
