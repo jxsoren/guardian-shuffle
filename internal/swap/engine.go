@@ -3,6 +3,7 @@ package swap
 import (
 	"context"
 	"fmt"
+	"log"
 	"math/rand"
 	"time"
 
@@ -65,6 +66,7 @@ func (e *Engine) CycleUser(ctx context.Context, userID int64, now time.Time) err
 		return err
 	}
 	_ = e.store.RecordSwap(ctx, userID, equipped.ItemHash, pick.ItemHash, "ok")
+	log.Printf("cycle: user %d swapped emblem %d -> %d (char %s)", userID, equipped.ItemHash, pick.ItemHash, charID)
 
 	s, err := e.store.GetSettings(ctx, userID)
 	if err != nil {
