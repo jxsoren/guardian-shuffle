@@ -14,7 +14,7 @@ type recordingCycler struct {
 	called []int64
 }
 
-func (r *recordingCycler) CycleUser(_ context.Context, userID int64, _ time.Time) error {
+func (r *recordingCycler) CycleUser(_ context.Context, userID int64, _ time.Time, _ string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.called = append(r.called, userID)

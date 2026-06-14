@@ -1,0 +1,11 @@
+# Local environment / secrets
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+
+# Build output
+/server
+.superpowers/

@@ -3,7 +3,7 @@ package swap
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"math/rand"
 	"time"
 
@@ -36,8 +36,9 @@ func NewEngine(api bungie.API, st store.Store, token TokenFunc, emblemSet Emblem
 var ErrNothingToCycle = fmt.Errorf("no alternate emblem available to cycle to")
 
 // CycleUser performs one emblem swap for the user. It records the outcome and
-// updates LastCycledAt on success.
-func (e *Engine) CycleUser(ctx context.Context, userID int64, now time.Time) error {
+// updates LastCycledAt on success. trigger names what initiated the cycle
+// ("manual", "scheduled", or "event") and is attached to the structured log.
+func (e *Engine) CycleUser(ctx context.Context, userID int64, now time.Time, trigger string) error {
 	u, err := e.store.GetUser(ctx, userID)
 	if err != nil {
 		return err
@@ -63,10 +64,26 @@ func (e *Engine) CycleUser(ctx context.Context, userID int64, now time.Time) err
 	}
 	if err := e.api.EquipItem(ctx, token, pick.ItemInstanceID, charID, u.MembershipType); err != nil {
 		_ = e.store.RecordSwap(ctx, userID, equipped.ItemHash, pick.ItemHash, "error")
+		slog.Warn("cycle",
+			"user_id", userID,
+			"trigger", trigger,
+			"old_hash", equipped.ItemHash,
+			"new_hash", pick.ItemHash,
+			"char_id", charID,
+			"result", "error",
+			"error", err.Error(),
+		)
 		return err
 	}
 	_ = e.store.RecordSwap(ctx, userID, equipped.ItemHash, pick.ItemHash, "ok")
-	log.Printf("cycle: user %d swapped emblem %d -> %d (char %s)", userID, equipped.ItemHash, pick.ItemHash, charID)
+	slog.Info("cycle",
+		"user_id", userID,
+		"trigger", trigger,
+		"old_hash", equipped.ItemHash,
+		"new_hash", pick.ItemHash,
+		"char_id", charID,
+		"result", "ok",
+	)
 
 	s, err := e.store.GetSettings(ctx, userID)
 	if err != nil {

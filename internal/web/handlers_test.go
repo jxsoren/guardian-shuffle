@@ -17,7 +17,7 @@ import (
 
 type stubCycler struct{ err error }
 
-func (s stubCycler) CycleUser(context.Context, int64, time.Time) error { return s.err }
+func (s stubCycler) CycleUser(context.Context, int64, time.Time, string) error { return s.err }
 
 type stubSessions struct {
 	id int64

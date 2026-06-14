@@ -48,7 +48,7 @@ func profileWithChar(charID string) *bungie.ProfileResponse {
 
 type stubCycler struct{ calls int }
 
-func (s *stubCycler) CycleUser(context.Context, int64, time.Time) error {
+func (s *stubCycler) CycleUser(context.Context, int64, time.Time, string) error {
 	s.calls++
 	return nil
 }
@@ -140,7 +140,7 @@ func TestPoll_ActivityToOrbit_CyclesFired(t *testing.T) {
 	up := newPoller(api, cycler)
 	state := stateUnknown
 
-	up.poll(context.Background(), &state)      // Unknown → InActivity
+	up.poll(context.Background(), &state)            // Unknown → InActivity
 	_, stop := up.poll(context.Background(), &state) // InActivity → InOrbit
 
 	if stop {

@@ -107,7 +107,7 @@ func TestMemoryStore_EventModeUsers(t *testing.T) {
 	id3, _ := s.UpsertUser(ctx, User{BungieMembershipID: "m3"})
 
 	_ = s.SaveSettings(ctx, Settings{UserID: id1, Enabled: true, TriggerMode: "event"})
-	_ = s.SaveSettings(ctx, Settings{UserID: id2, Enabled: false, TriggerMode: "event"}) // disabled
+	_ = s.SaveSettings(ctx, Settings{UserID: id2, Enabled: false, TriggerMode: "event"})    // disabled
 	_ = s.SaveSettings(ctx, Settings{UserID: id3, Enabled: true, TriggerMode: "scheduled"}) // wrong mode
 
 	users, err := s.EventModeUsers(ctx)
