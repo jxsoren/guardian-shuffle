@@ -25,7 +25,7 @@ var tmpl = template.Must(template.ParseFS(templatesFS, "templates/*.html"))
 
 // Cycler is the swap.Engine surface the handlers need.
 type Cycler interface {
-	CycleUser(ctx context.Context, userID int64, now time.Time) error
+	CycleUser(ctx context.Context, userID int64, now time.Time, trigger string) error
 }
 
 // SessionManager maps requests to a logged-in user ID. Phase 1 uses a signed cookie.
@@ -171,7 +171,7 @@ func (h *Handlers) CycleNow(w http.ResponseWriter, r *http.Request) {
 	// This endpoint backs an htmx fragment (#result on the dashboard). htmx only
 	// swaps responses with a 2xx status, so every outcome the user should see is
 	// returned as 200 with a human-readable message.
-	if err := h.Cycler.CycleUser(r.Context(), id, time.Now()); err != nil {
+	if err := h.Cycler.CycleUser(r.Context(), id, time.Now(), "manual"); err != nil {
 		if errors.Is(err, bungie.ErrItemActionForbidden) {
 			fmt.Fprint(w, "Can't change emblems while in an activity — head to orbit or the Tower and try again.")
 			return

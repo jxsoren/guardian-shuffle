@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
 	"math/rand"
 	"net/http"
+	"os"
 	"os/signal"
 	"sync"
 	"syscall"
@@ -24,6 +26,11 @@ import (
 const bungieBase = "https://www.bungie.net"
 
 func main() {
+	// Emit structured JSON logs. slog.SetDefault also redirects the standard
+	// log package, so every log line (including log.Printf elsewhere) becomes
+	// JSON that Loki/Grafana can parse and aggregate by field.
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("config: %v", err)

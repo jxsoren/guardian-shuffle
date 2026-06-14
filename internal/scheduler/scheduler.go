@@ -11,7 +11,7 @@ import (
 
 // Cycler is the swap.Engine surface the scheduler needs.
 type Cycler interface {
-	CycleUser(ctx context.Context, userID int64, now time.Time) error
+	CycleUser(ctx context.Context, userID int64, now time.Time, trigger string) error
 }
 
 type Scheduler struct {
@@ -30,7 +30,7 @@ func (s *Scheduler) RunOnce(ctx context.Context, now time.Time) error {
 		return err
 	}
 	for _, id := range due {
-		if err := s.cycler.CycleUser(ctx, id, now); err != nil {
+		if err := s.cycler.CycleUser(ctx, id, now, "scheduled"); err != nil {
 			log.Printf("scheduler: cycle user %d failed: %v", id, err)
 		}
 	}

@@ -19,7 +19,7 @@ const (
 type pollState int
 
 const (
-	stateUnknown    pollState = iota
+	stateUnknown pollState = iota
 	stateInActivity
 	stateInOrbit
 )
@@ -29,7 +29,7 @@ var reauthErr = auth.ErrReauthRequired
 
 // Cycler is the surface of swap.Engine needed by the poller.
 type Cycler interface {
-	CycleUser(ctx context.Context, userID int64, now time.Time) error
+	CycleUser(ctx context.Context, userID int64, now time.Time, trigger string) error
 }
 
 type userPoller struct {
@@ -124,7 +124,7 @@ func (up *userPoller) poll(ctx context.Context, state *pollState) (time.Duration
 	}
 
 	if prev == stateInActivity && *state == stateInOrbit {
-		if err := up.cycler.CycleUser(ctx, up.userID, time.Now()); err != nil {
+		if err := up.cycler.CycleUser(ctx, up.userID, time.Now(), "event"); err != nil {
 			log.Printf("poller: user %d: cycle: %v", up.userID, err)
 		}
 	}
