@@ -1,9 +1,13 @@
 package swap
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log"
 	"math/rand"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,6 +42,38 @@ func newEngine(api bungie.API, st store.Store) *Engine {
 	return NewEngine(api, st, staticToken,
 		func() map[uint32]bool { return map[uint32]bool{200: true, 300: true} },
 		func() *rand.Rand { return rand.New(rand.NewSource(1)) })
+}
+
+func TestCycleUser_LogsTheSwap(t *testing.T) {
+	ctx := context.Background()
+	st := store.NewMemory()
+	id, _ := st.UpsertUser(ctx, store.User{BungieMembershipID: "m1", MembershipType: 3, PrimaryCharacterID: "c1"})
+
+	p := &bungie.ProfileResponse{}
+	p.Response.Characters.Data = map[string]bungie.Character{"c1": {CharacterID: "c1", DateLastPlayed: "2026-06-10T00:00:00Z"}}
+	p.Response.CharacterEquipment.Data = map[string]bungie.ItemList{
+		"c1": {Items: []bungie.Item{{ItemHash: 100, ItemInstanceID: "eqp", BucketHash: bungie.EmblemBucketHash}}},
+	}
+	p.Response.CharacterInventories.Data = map[string]bungie.ItemList{
+		"c1": {Items: []bungie.Item{
+			{ItemHash: 200, ItemInstanceID: "inv1", BucketHash: 1469714392},
+			{ItemHash: 300, ItemInstanceID: "inv2", BucketHash: 1469714392},
+		}},
+	}
+	api := &fakeAPI{profile: p}
+
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+
+	eng := newEngine(api, st)
+	if err := eng.CycleUser(ctx, id, time.Now()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "cycle:") || !strings.Contains(out, "user 1") {
+		t.Fatalf("expected a cycle log line naming user 1, got %q", out)
+	}
 }
 
 func TestCycleUser_EquipsAnInventoryEmblem(t *testing.T) {
